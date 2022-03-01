@@ -180,6 +180,22 @@ contract SquadzEngine is SquadzDescriptor, ShellBaseEngine {
         );
     }
 
+    function removeAdmin(
+        IShellFramework collection,
+        uint256 fork,
+        address member
+    ) external {
+        require(collection.getForkOwner(fork) == msg.sender, "owner only");
+        (uint256 tokenId, uint256 timestamp, bool admin) = latestTokenOf(
+            collection,
+            fork,
+            member
+        );
+        if (admin)
+            // rewrite the latest token with admin == false
+            _writeLatestToken(collection, fork, tokenId, member, timestamp, 0);
+    }
+
     //-------------------
     // Public functions
     //-------------------
@@ -325,17 +341,35 @@ contract SquadzEngine is SquadzDescriptor, ShellBaseEngine {
 
         uint256 adminInt = 1;
         if (!admin) adminInt = 0;
-        collection.writeForkInt(
-            StorageLocation.ENGINE,
+        _writeLatestToken(
+            collection,
             fork,
-            _latestTokenKey(to),
-            (tokenId << 128) | (block.timestamp << 1) | adminInt
+            tokenId,
+            to,
+            block.timestamp,
+            adminInt
         );
         collection.writeForkInt(
             StorageLocation.ENGINE,
             fork,
             _latestMintKey(msg.sender),
             block.timestamp
+        );
+    }
+
+    function _writeLatestToken(
+        IShellFramework collection,
+        uint256 fork,
+        uint256 tokenId,
+        address to,
+        uint256 timestamp,
+        uint256 adminInt
+    ) private {
+        collection.writeForkInt(
+            StorageLocation.ENGINE,
+            fork,
+            _latestTokenKey(to),
+            (tokenId << 128) | (timestamp << 1) | adminInt
         );
     }
 
