@@ -1,3 +1,6 @@
 [submodule "/Users/ezra/workspace/RGroup/squadz-copy/lib/ds-test"]
 	path = /Users/ezra/workspace/RGroup/squadz-copy/lib/ds-test
 	url = https://github.com/dapphub/ds-test
+[submodule "/Users/ezra/workspace/RGroup/squadz-copy/lib/shell-contracts.git"]
+	path = /Users/ezra/workspace/RGroup/squadz-copy/lib/shell-contracts.git
+	url = https://github.com/R-Group-Devs/shell-contracts.git
