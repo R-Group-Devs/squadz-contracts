@@ -17,7 +17,7 @@ contract SquadzEngine is SquadzDescriptor, ShellBaseEngine {
     //-------------------
 
     /* Length of time a token is active */
-    uint256 public constant baseExpiry = 180 days;
+    uint256 public constant baseExpiry = 365 days;
 
     /* Minimum time between mints for admins */
     uint256 public constant baseCooldown = 8 hours;
@@ -114,12 +114,12 @@ contract SquadzEngine is SquadzDescriptor, ShellBaseEngine {
     /* No transfers! */
     function beforeTokenTransfer(
         address,
-        address,
+        address from,
         address,
         uint256,
         uint256
     ) external pure override {
-        revert("No transfers");
+        require(from == address(0), "Only mints");
     }
 
     function setCollectionConfig(
@@ -133,8 +133,8 @@ contract SquadzEngine is SquadzDescriptor, ShellBaseEngine {
         require(collection.getForkOwner(fork) == msg.sender, "owner only");
         require(expiry != 0, "expiry 0");
         require(cooldown != 0, "cooldown 0");
-        require(bonus != 0, "activePower 0");
-        require(max >= 1, "maxTokenPower < 1");
+        require(bonus != 0, "bonus 0");
+        require(max != 0, "max 0");
 
         (
             uint256 currentExpiry,
@@ -290,8 +290,9 @@ contract SquadzEngine is SquadzDescriptor, ShellBaseEngine {
             fork,
             member
         );
-        if (mintedAt + expiry <= timestamp) return (true, admin);
-        return (false, admin);
+        if (mintedAt == 0 || mintedAt + expiry < timestamp)
+            return (false, admin);
+        return (true, admin);
     }
 
     //-------------------

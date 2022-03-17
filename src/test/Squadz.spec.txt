@@ -1,0 +1,50 @@
+name
+- returns "Squadz Engine v0.0.1"
+
+setCollectionConfig
+- fails if sender is not fork owner
+- fails if expiry is 0
+- fails if cooldown is 0
+- fails if bonus is 0
+- fails if max is 0
+- sets expiry, cooldown, bonus, max, and emits SetCollectionConfig
+
+getCollectionConfig
+- incorporated into setCollectionConfig test
+
+mint
+- fails if max tokens has been reached (not easily testable?)
+- fails if minting admin and sender is not owner
+- fails if minting non-admin and sender is not owner nor active
+- fails if minting non-admin and sender is not owner nor admin
+- fails if minting non-admin and sender is admin with cooldown not up
+- mints admin token 
+- mints non-admin token
+
+batchMint
+- fails toAddresses has diff length than adminBools
+- all same tests as mint (skipping for now)
+
+transfer
+- fails
+
+latestTokenOf
+- if token was minted, returns the tokenId, timestamp minted, and admin bool for last token minted to an address
+- if no token was minted, returns 0, 0, false
+
+isActiveAdmin
+- if address has never been minted a token, returns false, false
+- if address was most recently minted a non-admin token within expiry at timestamp, return true, false
+- if address was most recently minted an admin token within expiry at timestamp, returns true, true
+- if address was most recently minted an admin token outside of expiry at timestamp, return false, true
+- if address was most recently minted a non-admin token outside of expiry at timestamp, return false, false
+
+powerOfAt
+- returns (active * bonus) + min(balance, max), where active is 0 if no token was minted within expiry for the address at the timestamp
+
+removeAdmin
+- fails if sender is not fork owner
+- rewrites latest token with admin == false and no other change
+
+getTokenURI
+- ?? not sure how to check this in solidity
