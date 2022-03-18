@@ -16,7 +16,7 @@ interface INameRecord {
     function getNames(address[] calldata)
         external
         view
-        returns (string[] memory r);
+        returns (string[] memory);
 }
 
 contract SquadzDescriptor is PersonalizedSVG {
@@ -26,17 +26,20 @@ contract SquadzDescriptor is PersonalizedSVG {
     function _computeName(IShellFramework collection, uint256 tokenId)
         internal
         view
-        returns (string memory name)
+        returns (string memory)
     {
         address owner = IERC721(address(collection)).ownerOf(tokenId);
         require(owner != address(0), "no token");
         address[] memory addresses = new address[](1);
         addresses[0] = owner;
-        try nameRecord.getNames(addresses) returns (string[] memory names) {
-            name = names[0];
-        } catch {
-            name = Strings.toHexString(uint256(uint160(owner)));
+        if (address(nameRecord) != address(0)) {
+            try nameRecord.getNames(addresses) returns (string[] memory names) {
+                return names[0];
+            } catch {
+                return Strings.toHexString(uint256(uint160(owner)));
+            }
         }
+        return Strings.toHexString(uint256(uint160(owner)));
     }
 
     function _computeDescription(IShellFramework collection, uint256 tokenId)

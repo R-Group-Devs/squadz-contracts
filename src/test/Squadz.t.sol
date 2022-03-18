@@ -103,10 +103,10 @@ contract SquadzTest is DSTest {
         assertEq(bonus, baseBonus, "bonus");
         assertEq(max, baseMax, "max");
         vm.prank(owner);
-        uint256 expectedNewExpiry = uint256(expiry_ + 1);
-        uint256 expectedNewCooldown = uint256(cooldown_ + 1);
-        uint256 expectedNewBonus = uint256(bonus_ + 1);
-        uint256 expectedNewMax = uint256(max_ + 1);
+        uint256 expectedNewExpiry = uint256(expiry_) + 1;
+        uint256 expectedNewCooldown = uint256(cooldown_) + 1;
+        uint256 expectedNewBonus = uint256(bonus_) + 1;
+        uint256 expectedNewMax = uint256(max_) + 1;
         vm.expectEmit(true, true, false, true);
         emit SetCollectionConfig(
             address(squadzCollection),
@@ -594,6 +594,7 @@ contract SquadzTest is DSTest {
             .latestTokenOf(squadzCollection, defaultFork, mintee);
         assertEq(tokenId1, tokenId2, "token Ids");
         assertEq(timestamp1, timestamp2, "timestamps");
+        assertTrue(!admin2, "admin 2");
     }
 
     function testFail_removAdmin_nonOwner(address mintee) public {
@@ -612,7 +613,7 @@ contract SquadzTest is DSTest {
             defaultFork,
             mintee
         );
-        string memory uri = squadzCollection.tokenURI(tokenId);
+        squadzCollection.tokenURI(tokenId);
         // not sure what to do here tbh
     }
 }
