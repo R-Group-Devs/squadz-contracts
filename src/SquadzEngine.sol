@@ -122,6 +122,8 @@ contract SquadzEngine is SquadzDescriptor, ShellBaseEngine {
         require(from == address(0), "Only mints");
     }
 
+    // To set cooldown, bonus, or max to 0, set them to type(uint256).max
+
     function setCollectionConfig(
         IShellFramework collection,
         uint256 fork,
@@ -246,12 +248,15 @@ contract SquadzEngine is SquadzDescriptor, ShellBaseEngine {
             _COOLDOWN
         );
         if (cooldown == 0) cooldown = baseCooldown;
+        else if (cooldown == type(uint256).max) cooldown = 0;
 
         bonus = collection.readForkInt(StorageLocation.ENGINE, fork, _BONUS);
         if (bonus == 0) bonus = uint256(baseBonus);
+        else if (bonus == type(uint256).max) bonus = 0;
 
         max = collection.readForkInt(StorageLocation.ENGINE, fork, _MAX);
         if (max == 0) max = uint256(baseMax);
+        else if (max == type(uint256).max) max = 0;
     }
 
     function latestTokenOf(
@@ -333,11 +338,9 @@ contract SquadzEngine is SquadzDescriptor, ShellBaseEngine {
             require(senderActive && senderAdmin, "owner, admin only");
             // check cooldown is up
             (, uint256 cooldown, , ) = getCollectionConfig(collection, fork);
-            require(
-                _latestMintOf(collection, fork, msg.sender) + cooldown >
-                    block.timestamp,
-                "cooldown"
-            );
+            uint256 latestMint = _latestMintOf(collection, fork, msg.sender);
+            if (latestMint != 0)
+                require(latestMint + cooldown <= block.timestamp, "cooldown");
         }
 
         uint256 adminInt = 1;

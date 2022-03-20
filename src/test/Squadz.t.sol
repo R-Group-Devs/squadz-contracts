@@ -245,6 +245,7 @@ contract SquadzTest is DSTest {
     function test_mint_adminMintNonAdmin(address admin, address mintee) public {
         if (mintee == address(0)) return;
         if (admin == address(0)) return;
+        if (mintee == admin) return;
         test_mint_ownerMintAdmin(admin);
         (bool activeBefore, bool adminBefore) = squadzEngine.isActiveAdmin(
             squadzCollection,
@@ -252,8 +253,8 @@ contract SquadzTest is DSTest {
             mintee,
             block.timestamp
         );
-        assertTrue(!activeBefore, "mintee active");
-        assertTrue(!adminBefore, "mintee admin");
+        assertTrue(!activeBefore, "mintee active 1");
+        assertTrue(!adminBefore, "mintee admin 1");
         vm.prank(admin);
         squadzEngine.mint(squadzCollection, defaultFork, mintee, false);
         (bool activeAfter, bool adminAfter) = squadzEngine.isActiveAdmin(
@@ -262,8 +263,26 @@ contract SquadzTest is DSTest {
             mintee,
             block.timestamp
         );
-        assertTrue(activeAfter, "mintee active");
-        assertTrue(!adminAfter, "mintee admin");
+        assertTrue(activeAfter, "mintee active 2");
+        assertTrue(!adminAfter, "mintee admin 2");
+        (, uint256 timestamp1, ) = squadzEngine.latestTokenOf(
+            squadzCollection,
+            defaultFork,
+            mintee
+        );
+        assertEq(timestamp1, block.timestamp, "timestamp 1");
+        console.log("timestamp before warp", block.timestamp);
+        vm.warp(block.timestamp + baseCooldown + 1);
+        console.log("timestamp after warp", block.timestamp);
+
+        vm.prank(admin);
+        squadzEngine.mint(squadzCollection, defaultFork, mintee, false);
+        (, uint256 timestamp2, ) = squadzEngine.latestTokenOf(
+            squadzCollection,
+            defaultFork,
+            mintee
+        );
+        assertEq(timestamp2, block.timestamp, "timestamp 2");
     }
 
     function testFail_mint_adminMintAdmin(address admin, address mintee)
@@ -384,10 +403,25 @@ contract SquadzTest is DSTest {
         uint256 minteeCount = 10;
         address[] memory mintees = new address[](minteeCount);
         bool[] memory adminBools = new bool[](minteeCount);
+        vm.prank(owner);
+        squadzEngine.setCollectionConfig(
+            squadzCollection,
+            defaultFork,
+            baseExpiry,
+            type(uint256).max,
+            baseBonus,
+            baseMax
+        );
+        (, uint256 cooldown, , ) = squadzEngine.getCollectionConfig(
+            squadzCollection,
+            defaultFork
+        );
+        console.log("found cooldown", cooldown);
         uint256 i;
         for (i; i < minteeCount; i++) {
             mintees[i] = address(uint160(i + 1));
             address mintee = mintees[i];
+            if (admin == mintee) return;
             (bool activeBefore, bool adminBefore) = squadzEngine.isActiveAdmin(
                 squadzCollection,
                 defaultFork,

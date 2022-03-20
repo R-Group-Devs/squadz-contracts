@@ -5,7 +5,7 @@ import {Strings} from "@openzeppelin/contracts/utils/Strings.sol";
 import {IShellFramework, MintEntry} from "shell-contracts.git/IShellFramework.sol";
 import {PersonalizedSVG} from "./lib/PersonalizedSVG.sol";
 
-interface IERC721 {
+interface IERC721Partial {
     function name() external view returns (string memory);
 
     function ownerOf(uint256) external view returns (address);
@@ -28,7 +28,7 @@ contract SquadzDescriptor is PersonalizedSVG {
         view
         returns (string memory)
     {
-        address owner = IERC721(address(collection)).ownerOf(tokenId);
+        address owner = IERC721Partial(address(collection)).ownerOf(tokenId);
         require(owner != address(0), "no token");
         address[] memory addresses = new address[](1);
         addresses[0] = owner;
@@ -51,12 +51,14 @@ contract SquadzDescriptor is PersonalizedSVG {
             string(
                 abi.encodePacked(
                     "Squadz NFT: ",
-                    IERC721(address(collection)).name(),
+                    IERC721Partial(address(collection)).name(),
                     " \\n\\nIssued to ",
                     Strings.toHexString(
                         uint256(
                             uint160(
-                                IERC721(address(collection)).ownerOf(tokenId)
+                                IERC721Partial(address(collection)).ownerOf(
+                                    tokenId
+                                )
                             )
                         )
                     ),
@@ -75,7 +77,7 @@ contract SquadzDescriptor is PersonalizedSVG {
         return
             getSVG(
                 _computeName(collection, tokenId),
-                IERC721(address(collection)).name(),
+                IERC721Partial(address(collection)).name(),
                 Strings.toString(tokenId)
             );
     }
