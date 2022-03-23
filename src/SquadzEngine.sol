@@ -2,16 +2,11 @@
 pragma solidity ^0.8.10;
 
 import {Base64} from "shell-contracts.git/libraries/Base64.sol";
-import {IEngine, ShellBaseEngine} from "shell-contracts.git/engines/ShellBaseEngine.sol";
+import {ShellBaseEngine} from "shell-contracts.git/engines/ShellBaseEngine.sol";
 import {IShellFramework, StorageLocation, StringStorage, IntStorage, MintOptions, MintEntry} from "shell-contracts.git/IShellFramework.sol";
-import {IERC165} from "shell-contracts.git/IShellFramework.sol";
 import {SquadzDescriptor} from "./SquadzDescriptor.sol";
 
-interface IERC721 {
-    function balanceOf(address) external view returns (uint256);
-}
-
-contract SquadzEngine is SquadzDescriptor, ShellBaseEngine {
+contract SquadzEngine is ShellBaseEngine, SquadzDescriptor {
     //-------------------
     // State
     //-------------------
@@ -46,6 +41,14 @@ contract SquadzEngine is SquadzDescriptor, ShellBaseEngine {
         uint256 bonus,
         uint256 max
     );
+
+    //-------------------
+    // Constructor
+    //-------------------
+
+    constructor(address nameRecordAddress)
+        SquadzDescriptor(nameRecordAddress)
+    {}
 
     //-------------------
     // External functions
@@ -86,16 +89,15 @@ contract SquadzEngine is SquadzDescriptor, ShellBaseEngine {
     function powerOfAt(
         IShellFramework collection,
         uint256 fork,
-        address member,
-        uint256 timestamp
+        address member
     ) external view returns (uint256 power) {
-        (bool active, ) = isActiveAdmin(collection, fork, member, timestamp);
+        (bool active, ) = isActiveAdmin(collection, fork, member);
         (, , uint256 bonus, uint256 max) = getCollectionConfig(
             collection,
             fork
         );
         if (active) power += bonus;
-        uint256 balance = IERC721(address(collection)).balanceOf(member);
+        (, uint256 balance, , ) = latestTokenOf(collection, fork, member);
         balance > max ? power += max : power += balance;
     }
 
@@ -188,14 +190,14 @@ contract SquadzEngine is SquadzDescriptor, ShellBaseEngine {
         address member
     ) external {
         require(collection.getForkOwner(fork) == msg.sender, "owner only");
-        (uint256 tokenId, uint256 timestamp, bool admin) = latestTokenOf(
+        (uint256 tokenId, , uint256 timestamp, bool admin) = latestTokenOf(
             collection,
             fork,
             member
         );
         if (admin)
             // rewrite the latest token with admin == false
-            _writeLatestToken(collection, fork, tokenId, member, timestamp, 0);
+            _writeLatestToken(collection, fork, member, tokenId, timestamp, 0);
     }
 
     //-------------------
@@ -211,6 +213,7 @@ contract SquadzEngine is SquadzDescriptor, ShellBaseEngine {
         StringStorage[] memory stringData = new StringStorage[](0);
         IntStorage[] memory intData = new IntStorage[](0);
 
+        // we would really like to set this token's fork here, too, but we can't
         tokenId = collection.mint(
             MintEntry({
                 to: to,
@@ -268,6 +271,7 @@ contract SquadzEngine is SquadzDescriptor, ShellBaseEngine {
         view
         returns (
             uint256 tokenId,
+            uint256 forkBalance,
             uint256 timestamp,
             bool admin
         )
@@ -277,25 +281,25 @@ contract SquadzEngine is SquadzDescriptor, ShellBaseEngine {
             fork,
             _latestTokenKey(member)
         );
-        uint256 adminInt = res & 1;
+        uint256 adminInt = res & 0x1;
         adminInt == 1 ? admin = true : admin = false;
-        timestamp = uint256(uint128(res) >> 1);
+        timestamp = uint256(uint64(res) >> 1);
+        forkBalance = uint256(uint128(res) >> 64);
         tokenId = res >> 128;
     }
 
     function isActiveAdmin(
         IShellFramework collection,
         uint256 fork,
-        address member,
-        uint256 timestamp
+        address member
     ) public view returns (bool, bool) {
         (uint256 expiry, , , ) = getCollectionConfig(collection, fork);
-        (, uint256 mintedAt, bool admin) = latestTokenOf(
+        (, , uint256 mintedAt, bool admin) = latestTokenOf(
             collection,
             fork,
             member
         );
-        if (mintedAt == 0 || mintedAt + expiry < timestamp)
+        if (mintedAt == 0 || mintedAt + expiry < block.timestamp)
             return (false, admin);
         return (true, admin);
     }
@@ -332,8 +336,7 @@ contract SquadzEngine is SquadzDescriptor, ShellBaseEngine {
             (bool senderActive, bool senderAdmin) = isActiveAdmin(
                 collection,
                 fork,
-                msg.sender,
-                block.timestamp
+                msg.sender
             );
             require(senderActive && senderAdmin, "owner, admin only");
             // check cooldown is up
@@ -342,17 +345,12 @@ contract SquadzEngine is SquadzDescriptor, ShellBaseEngine {
             if (latestMint != 0)
                 require(latestMint + cooldown <= block.timestamp, "cooldown");
         }
+        (, uint256 balance, , ) = latestTokenOf(collection, fork, to);
+        require(balance < type(uint64).max, "max balance");
 
         uint256 adminInt = 1;
         if (!admin) adminInt = 0;
-        _writeLatestToken(
-            collection,
-            fork,
-            tokenId,
-            to,
-            block.timestamp,
-            adminInt
-        );
+        _writeLatestToken(collection, fork, to, tokenId, balance + 1, adminInt);
         collection.writeForkInt(
             StorageLocation.ENGINE,
             fork,
@@ -364,16 +362,19 @@ contract SquadzEngine is SquadzDescriptor, ShellBaseEngine {
     function _writeLatestToken(
         IShellFramework collection,
         uint256 fork,
-        uint256 tokenId,
         address to,
-        uint256 timestamp,
+        uint256 tokenId,
+        uint256 balance,
         uint256 adminInt
     ) private {
         collection.writeForkInt(
             StorageLocation.ENGINE,
             fork,
             _latestTokenKey(to),
-            (tokenId << 128) | (timestamp << 1) | adminInt
+            (tokenId << 128) |
+                (balance << 64) |
+                (block.timestamp << 1) | // assumes timestamp can never be greater than max uint63
+                (adminInt & 0x1)
         );
     }
 

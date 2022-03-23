@@ -2,7 +2,7 @@
 pragma solidity ^0.8.10;
 
 import {Strings} from "@openzeppelin/contracts/utils/Strings.sol";
-import {IShellFramework, MintEntry} from "shell-contracts.git/IShellFramework.sol";
+import {IShellFramework} from "shell-contracts.git/IShellFramework.sol";
 import {PersonalizedSVG} from "./lib/PersonalizedSVG.sol";
 
 interface IERC721Partial {
@@ -21,7 +21,11 @@ interface INameRecord {
 
 contract SquadzDescriptor is PersonalizedSVG {
     // to be replaced by some name system later
-    INameRecord public constant nameRecord = INameRecord(address(0));
+    INameRecord public immutable nameRecord;
+
+    constructor(address nameRecordAddress) {
+        nameRecord = INameRecord(nameRecordAddress);
+    }
 
     function _computeName(IShellFramework collection, uint256 tokenId)
         internal
