@@ -1,0 +1,4 @@
+Submitted contract for verification:
+                Response: `OK`
+                GUID: `dshb9mgxrqj2wwrv7ts6fxaqbgccmxdbsgswwdwlm5tph6ieag`
+                url: https://goerli.etherscan.io//address/0xea36…c0c0#code

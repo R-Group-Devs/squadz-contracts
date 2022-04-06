@@ -6,5 +6,5 @@ interface IPersonalizedSVG {
         string memory,
         string memory,
         string memory
-    ) external pure returns (string memory);
+    ) external view returns (string memory);
 }

@@ -1,4 +1,0 @@
-Submitted contract for verification:
-                Response: `OK`
-                GUID: `np9e7v3p8q21wfnixmsfykaey6bmnlqhzpbggfgpqzkdjhmhyp`
-                url: https://mumbai.polygonscan.com//address/0xa580…db12#code

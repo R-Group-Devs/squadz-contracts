@@ -3,7 +3,7 @@ pragma solidity ^0.8.10;
 
 import {Strings} from "@openzeppelin/contracts/utils/Strings.sol";
 import {IShellFramework} from "shell-contracts.git/IShellFramework.sol";
-import {PersonalizedSVG} from "./lib/PersonalizedSVG.sol";
+import {IPersonalizedSVG} from "./lib/IPersonalizedSVG.sol";
 
 interface IERC721Partial {
     function name() external view returns (string memory);
@@ -19,7 +19,7 @@ interface INameRecord {
         returns (string[] memory);
 }
 
-contract SquadzDescriptor is PersonalizedSVG {
+contract SquadzDescriptor {
     // to be replaced by some name system later
     INameRecord public immutable nameRecord;
 
@@ -73,13 +73,13 @@ contract SquadzDescriptor is PersonalizedSVG {
             );
     }
 
-    function _computeImageUri(IShellFramework collection, uint256 tokenId)
-        internal
-        view
-        returns (string memory)
-    {
+    function _computeImageUri(
+        IShellFramework collection,
+        uint256 tokenId,
+        IPersonalizedSVG personalizedSVG
+    ) internal view returns (string memory) {
         return
-            getSVG(
+            personalizedSVG.getSVG(
                 _computeName(collection, tokenId),
                 IERC721Partial(address(collection)).name(),
                 Strings.toString(tokenId)

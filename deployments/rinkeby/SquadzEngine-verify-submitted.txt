@@ -1,0 +1,4 @@
+Submitted contract for verification:
+                Response: `OK`
+                GUID: `dntac6idgk9xz6izfthtjzauyi39qnihetwe9wjxwta4sbrwqq`
+                url: https://rinkeby.etherscan.io//address/0xbeea…2ebc#code

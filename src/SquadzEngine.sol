@@ -5,6 +5,7 @@ import {Base64} from "shell-contracts.git/libraries/Base64.sol";
 import {ShellBaseEngine} from "shell-contracts.git/engines/ShellBaseEngine.sol";
 import {IShellFramework, StorageLocation, StringStorage, IntStorage, MintOptions, MintEntry} from "shell-contracts.git/IShellFramework.sol";
 import {SquadzDescriptor} from "./SquadzDescriptor.sol";
+import {IPersonalizedSVG} from "./lib/IPersonalizedSVG.sol";
 
 contract SquadzEngine is ShellBaseEngine, SquadzDescriptor {
     //-------------------
@@ -23,11 +24,15 @@ contract SquadzEngine is ShellBaseEngine, SquadzDescriptor {
     /* Max power from held tokens */
     uint8 public constant baseMax = 20;
 
+    /* Personalized SVG engine */
+    address public immutable baseSVG;
+
     /* Key strings */
     string private constant _EXPIRY = "EXPIRY";
     string private constant _COOLDOWN = "COOLDOWN";
     string private constant _BONUS = "BONUS";
     string private constant _MAX = "MAX";
+    string private constant _SVG = "SVG";
 
     //-------------------
     // Events
@@ -39,16 +44,20 @@ contract SquadzEngine is ShellBaseEngine, SquadzDescriptor {
         uint256 expiry,
         uint256 cooldown,
         uint256 bonus,
-        uint256 max
+        uint256 max,
+        address svgAddress
     );
 
     //-------------------
     // Constructor
     //-------------------
 
-    constructor(address nameRecordAddress)
+    constructor(address nameRecordAddress, address baseSVG_)
         SquadzDescriptor(nameRecordAddress)
-    {}
+    {
+        IPersonalizedSVG(baseSVG_).getSVG("", "", ""); // should throw if no method
+        baseSVG = baseSVG_;
+    }
 
     //-------------------
     // External functions
@@ -63,6 +72,8 @@ contract SquadzEngine is ShellBaseEngine, SquadzDescriptor {
         view
         returns (string memory)
     {
+        uint256 forkId = collection.getTokenForkId(tokenId);
+        (, , , , address svgAddress) = getCollectionConfig(collection, forkId);
         return
             string(
                 abi.encodePacked(
@@ -75,7 +86,11 @@ contract SquadzEngine is ShellBaseEngine, SquadzDescriptor {
                                 '", "description":"',
                                 _computeDescription(collection, tokenId),
                                 '", "image": "',
-                                _computeImageUri(collection, tokenId),
+                                _computeImageUri(
+                                    collection,
+                                    tokenId,
+                                    IPersonalizedSVG(svgAddress)
+                                ),
                                 '", "external_url": "',
                                 _computeExternalUrl(collection, tokenId),
                                 '"}'
@@ -84,21 +99,6 @@ contract SquadzEngine is ShellBaseEngine, SquadzDescriptor {
                     )
                 )
             );
-    }
-
-    function powerOfAt(
-        IShellFramework collection,
-        uint256 fork,
-        address member
-    ) external view returns (uint256 power) {
-        (bool active, ) = isActiveAdmin(collection, fork, member);
-        (, , uint256 bonus, uint256 max) = getCollectionConfig(
-            collection,
-            fork
-        );
-        if (active) power += bonus;
-        (, uint256 balance, , ) = latestTokenOf(collection, fork, member);
-        balance > max ? power += max : power += balance;
     }
 
     function batchMint(
@@ -132,19 +132,22 @@ contract SquadzEngine is ShellBaseEngine, SquadzDescriptor {
         uint256 expiry,
         uint256 cooldown,
         uint256 bonus,
-        uint256 max
+        uint256 max,
+        address svgAddress
     ) external {
         require(collection.getForkOwner(fork) == msg.sender, "owner only");
         require(expiry != 0, "expiry 0");
         require(cooldown != 0, "cooldown 0");
         require(bonus != 0, "bonus 0");
         require(max != 0, "max 0");
+        IPersonalizedSVG(svgAddress).getSVG("", "", ""); // should throw if no method
 
         (
             uint256 currentExpiry,
             uint256 currentCooldown,
             uint256 currentBonus,
-            uint256 currentMax
+            uint256 currentMax,
+            address currentSvgAddress
         ) = getCollectionConfig(collection, fork);
 
         if (expiry != currentExpiry)
@@ -174,13 +177,22 @@ contract SquadzEngine is ShellBaseEngine, SquadzDescriptor {
         if (max != currentMax)
             collection.writeForkInt(StorageLocation.ENGINE, fork, _MAX, max);
 
+        if (svgAddress != currentSvgAddress)
+            collection.writeForkInt(
+                StorageLocation.ENGINE,
+                fork,
+                _SVG,
+                uint256(uint160(svgAddress))
+            );
+
         emit SetCollectionConfig(
             address(collection),
             fork,
             expiry,
             cooldown,
             bonus,
-            max
+            max,
+            svgAddress
         );
     }
 
@@ -190,7 +202,7 @@ contract SquadzEngine is ShellBaseEngine, SquadzDescriptor {
         address member
     ) external {
         require(collection.getForkOwner(fork) == msg.sender, "owner only");
-        (uint256 tokenId, , uint256 timestamp, bool admin) = latestTokenOf(
+        (uint256 tokenId, , uint256 timestamp, bool admin) = _getLatestToken(
             collection,
             fork,
             member
@@ -210,6 +222,32 @@ contract SquadzEngine is ShellBaseEngine, SquadzDescriptor {
         address to,
         bool admin
     ) public returns (uint256 tokenId) {
+        if (admin) {
+            require(collection.getForkOwner(fork) == msg.sender, "owner only");
+        } else if (collection.getForkOwner(fork) != msg.sender) {
+            // check sender is admin
+            (
+                ,
+                ,
+                ,
+                bool senderActive,
+                bool senderAdmin,
+                ,
+                uint256 latestMintTime
+            ) = getMemberInfo(collection, fork, msg.sender);
+            require(senderActive && senderAdmin, "owner, admin only");
+
+            // check cooldown is up
+            (, uint256 cooldown, , , ) = getCollectionConfig(collection, fork);
+            if (latestMintTime != 0)
+                require(
+                    latestMintTime + cooldown <= block.timestamp,
+                    "cooldown"
+                );
+        }
+        (, uint256 balance, , ) = _getLatestToken(collection, fork, to);
+        require(balance < type(uint64).max, "max balance");
+
         StringStorage[] memory stringData = new StringStorage[](0);
         IntStorage[] memory intData = new IntStorage[](0);
 
@@ -229,7 +267,9 @@ contract SquadzEngine is ShellBaseEngine, SquadzDescriptor {
             })
         );
 
-        _writeMintData(collection, fork, to, tokenId, admin);
+        require(tokenId <= type(uint128).max, "max tokens");
+
+        _writeMintData(collection, fork, to, tokenId, balance, admin);
     }
 
     function getCollectionConfig(IShellFramework collection, uint256 fork)
@@ -239,7 +279,8 @@ contract SquadzEngine is ShellBaseEngine, SquadzDescriptor {
             uint256 expiry,
             uint256 cooldown,
             uint256 bonus,
-            uint256 max
+            uint256 max,
+            address svgAddress
         )
     {
         expiry = collection.readForkInt(StorageLocation.ENGINE, fork, _EXPIRY);
@@ -260,14 +301,56 @@ contract SquadzEngine is ShellBaseEngine, SquadzDescriptor {
         max = collection.readForkInt(StorageLocation.ENGINE, fork, _MAX);
         if (max == 0) max = uint256(baseMax);
         else if (max == type(uint256).max) max = 0;
+
+        svgAddress = address(
+            uint160(collection.readForkInt(StorageLocation.ENGINE, fork, _SVG))
+        );
+        if (svgAddress == address(0)) svgAddress = baseSVG;
     }
 
-    function latestTokenOf(
+    function getMemberInfo(
         IShellFramework collection,
         uint256 fork,
         address member
     )
         public
+        view
+        returns (
+            uint256 latestTokenId,
+            uint256 forkBalance,
+            uint256 latestTokenTime,
+            bool active,
+            bool admin,
+            uint256 power,
+            uint256 latestMintTime
+        )
+    {
+        (latestTokenId, forkBalance, latestTokenTime, admin) = _getLatestToken(
+            collection,
+            fork,
+            member
+        );
+        (uint256 expiry, , uint256 bonus, uint256 max, ) = getCollectionConfig(
+            collection,
+            fork
+        );
+        if (latestTokenTime != 0 && latestTokenTime + expiry >= block.timestamp)
+            active = true;
+        if (active) power += bonus;
+        forkBalance > max ? power += max : power += forkBalance;
+        latestMintTime = _getLatestMint(collection, fork, member);
+    }
+
+    //-------------------
+    // Private functions
+    //-------------------
+
+    function _getLatestToken(
+        IShellFramework collection,
+        uint256 fork,
+        address member
+    )
+        private
         view
         returns (
             uint256 tokenId,
@@ -288,27 +371,7 @@ contract SquadzEngine is ShellBaseEngine, SquadzDescriptor {
         tokenId = res >> 128;
     }
 
-    function isActiveAdmin(
-        IShellFramework collection,
-        uint256 fork,
-        address member
-    ) public view returns (bool, bool) {
-        (uint256 expiry, , , ) = getCollectionConfig(collection, fork);
-        (, , uint256 mintedAt, bool admin) = latestTokenOf(
-            collection,
-            fork,
-            member
-        );
-        if (mintedAt == 0 || mintedAt + expiry < block.timestamp)
-            return (false, admin);
-        return (true, admin);
-    }
-
-    //-------------------
-    // Private functions
-    //-------------------
-
-    function _latestMintOf(
+    function _getLatestMint(
         IShellFramework collection,
         uint256 fork,
         address admin
@@ -326,28 +389,9 @@ contract SquadzEngine is ShellBaseEngine, SquadzDescriptor {
         uint256 fork,
         address to,
         uint256 tokenId,
+        uint256 balance,
         bool admin
     ) private {
-        require(tokenId <= type(uint128).max, "max tokens");
-        if (admin) {
-            require(collection.getForkOwner(fork) == msg.sender, "owner only");
-        } else if (collection.getForkOwner(fork) != msg.sender) {
-            // check sender is admin
-            (bool senderActive, bool senderAdmin) = isActiveAdmin(
-                collection,
-                fork,
-                msg.sender
-            );
-            require(senderActive && senderAdmin, "owner, admin only");
-            // check cooldown is up
-            (, uint256 cooldown, , ) = getCollectionConfig(collection, fork);
-            uint256 latestMint = _latestMintOf(collection, fork, msg.sender);
-            if (latestMint != 0)
-                require(latestMint + cooldown <= block.timestamp, "cooldown");
-        }
-        (, uint256 balance, , ) = latestTokenOf(collection, fork, to);
-        require(balance < type(uint64).max, "max balance");
-
         uint256 adminInt = 1;
         if (!admin) adminInt = 0;
         _writeLatestToken(collection, fork, to, tokenId, balance + 1, adminInt);
